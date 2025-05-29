@@ -1,0 +1,12 @@
+.{
+    .fingerprint = 0xbd91fccfeb1d206d,
+    .name = .airwindows,
+    .version = "0.0.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig.zon",
+        "build.zig",
+        "zig-src",
+        "LICENSE",
+    },
+}

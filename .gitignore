@@ -1,0 +1,15 @@
+.DS_Store
+build/
+.zig-cache
+zig-out
+**.sln
+**.vcxproj
+**.vcxproj.filters
+**.vcxproj.user
+**/.vs
+**.xcodeproj
+**.suo
+**.plist
+**/PkgInfo
+**/CMakeLists.txt
+**.cmake
