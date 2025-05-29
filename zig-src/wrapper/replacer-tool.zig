@@ -56,6 +56,7 @@ pub fn main() !void {
     // Get a writer for the output file.
     const output_writer = output_file.writer();
 
+    std.log.warn("modified: {s}", .{modified_content});
     // Write the modified content to the output file.
     try output_writer.writeAll(modified_content);
 

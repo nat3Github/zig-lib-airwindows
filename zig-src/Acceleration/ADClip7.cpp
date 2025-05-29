@@ -1,28 +1,34 @@
 /* ========================================
- *  Acceleration - Acceleration.h
+ *  ADClip7 - ADClip7.h
  *  Copyright (c) 2016 airwindows, Airwindows uses the MIT license
  * ======================================== */
 
-#ifndef __Acceleration_H
-#include "Acceleration.h"
+#ifndef __ADClip7_H
+#include "ADClip7.h"
 #endif
 
-AudioEffect* createEffectInstance(audioMasterCallback audioMaster) {return new Acceleration(audioMaster);}
 AudioEffect* createEffectInstance(audioMasterCallback audioMaster) {return new ADClip7(audioMaster);}
 
-Acceleration::Acceleration(audioMasterCallback audioMaster) :
+ADClip7::ADClip7(audioMasterCallback audioMaster) :
     AudioEffectX(audioMaster, kNumPrograms, kNumParameters)
 {
-	A = 0.32;
-	B = 1.0;
-	ataLastOutL = 0.0;
-	s1L = s2L = s3L = 0.0;
-	o1L = o2L = o3L = 0.0;
-	m1L = m2L = desL = 0.0;
-	ataLastOutR = 0.0;
-	s1R = s2R = s3R = 0.0;
-	o1R = o2R = o3R = 0.0;
-	m1R = m2R = desR = 0.0;
+	A = 0.0;
+	B = 0.5;
+	C = 0.5;
+	D = 0.0;
+
+	lastSampleL = 0.0;
+	lastSampleR = 0.0;
+	for(int count = 0; count < 22199; count++) {bL[count] = 0; bR[count] = 0;}
+	gcount = 0;
+	lowsL = 0;
+	lowsR = 0;
+	refclipL = 0.99;
+	refclipR = 0.99;
+	iirLowsAL = 0.0;
+	iirLowsAR = 0.0;
+	iirLowsBL = 0.0;	
+	iirLowsBR = 0.0;	
 	
 	fpdL = 1.0; while (fpdL < 16386) fpdL = rand()*UINT32_MAX;
 	fpdR = 1.0; while (fpdR < 16386) fpdR = rand()*UINT32_MAX;
@@ -40,10 +46,10 @@ Acceleration::Acceleration(audioMasterCallback audioMaster) :
     vst_strncpy (_programName, "Default", kVstMaxProgNameLen); // default program name
 }
 
-Acceleration::~Acceleration() {}
-VstInt32 Acceleration::getVendorVersion () {return 1000;}
-void Acceleration::setProgramName(char *name) {vst_strncpy (_programName, name, kVstMaxProgNameLen);}
-void Acceleration::getProgramName(char *name) {vst_strncpy (name, _programName, kVstMaxProgNameLen);}
+ADClip7::~ADClip7() {}
+VstInt32 ADClip7::getVendorVersion () {return 1000;}
+void ADClip7::setProgramName(char *name) {vst_strncpy (_programName, name, kVstMaxProgNameLen);}
+void ADClip7::getProgramName(char *name) {vst_strncpy (name, _programName, kVstMaxProgNameLen);}
 //airwindows likes to ignore this stuff. Make your own programs, and make a different plugin rather than
 //trying to do versioning and preventing people from using older versions. Maybe they like the old one!
 
@@ -54,11 +60,13 @@ static float pinParameter(float data)
 	return data;
 }
 
-VstInt32 Acceleration::getChunk (void** data, bool isPreset)
+VstInt32 ADClip7::getChunk (void** data, bool isPreset)
 {
 	float *chunkData = (float *)calloc(kNumParameters, sizeof(float));
 	chunkData[0] = A;
 	chunkData[1] = B;
+	chunkData[2] = C;
+	chunkData[3] = D;
 	/* Note: The way this is set up, it will break if you manage to save settings on an Intel
 	 machine and load them on a PPC Mac. However, it's fine if you stick to the machine you 
 	 started with. */
@@ -67,11 +75,13 @@ VstInt32 Acceleration::getChunk (void** data, bool isPreset)
 	return kNumParameters * sizeof(float);
 }
 
-VstInt32 Acceleration::setChunk (void* data, VstInt32 byteSize, bool isPreset)
+VstInt32 ADClip7::setChunk (void* data, VstInt32 byteSize, bool isPreset)
 {	
 	float *chunkData = (float *)data;
 	A = pinParameter(chunkData[0]);
 	B = pinParameter(chunkData[1]);
+	C = pinParameter(chunkData[2]);
+	D = pinParameter(chunkData[3]);
 	/* We're ignoring byteSize as we found it to be a filthy liar */
 	
 	/* calculate any other fields you need here - you could copy in 
@@ -79,59 +89,74 @@ VstInt32 Acceleration::setChunk (void* data, VstInt32 byteSize, bool isPreset)
 	return 0;
 }
 
-void Acceleration::setParameter(VstInt32 index, float value) {
+void ADClip7::setParameter(VstInt32 index, float value) {
     switch (index) {
         case kParamA: A = value; break;
         case kParamB: B = value; break;
+        case kParamC: C = value; break;
+        case kParamD: D = value; break;
         default: throw; // unknown parameter, shouldn't happen!
     }
 }
 
-float Acceleration::getParameter(VstInt32 index) {
+float ADClip7::getParameter(VstInt32 index) {
     switch (index) {
         case kParamA: return A; break;
         case kParamB: return B; break;
+        case kParamC: return C; break;
+        case kParamD: return D; break;
         default: break; // unknown parameter, shouldn't happen!
     } return 0.0; //we only need to update the relevant name, this is simple to manage
 }
 
-void Acceleration::getParameterName(VstInt32 index, char *text) {
+void ADClip7::getParameterName(VstInt32 index, char *text) {
     switch (index) {
-        case kParamA: vst_strncpy (text, "Limit", kVstMaxParamStrLen); break;
-		case kParamB: vst_strncpy (text, "Dry/Wet", kVstMaxParamStrLen); break;
+        case kParamA: vst_strncpy (text, "Boost", kVstMaxParamStrLen); break;
+		case kParamB: vst_strncpy (text, "Soften", kVstMaxParamStrLen); break;
+		case kParamC: vst_strncpy (text, "Enhance", kVstMaxParamStrLen); break;
+		case kParamD: vst_strncpy (text, "Mode", kVstMaxParamStrLen); break;
         default: break; // unknown parameter, shouldn't happen!
     } //this is our labels for displaying in the VST host
 }
 
-void Acceleration::getParameterDisplay(VstInt32 index, char *text) {
+void ADClip7::getParameterDisplay(VstInt32 index, char *text) {
     switch (index) {
-        case kParamA: float2string (A, text, kVstMaxParamStrLen); break;
+        case kParamA: float2string (A*18.0, text, kVstMaxParamStrLen); break;
         case kParamB: float2string (B, text, kVstMaxParamStrLen); break;
+        case kParamC: float2string (C, text, kVstMaxParamStrLen); break;
+        case kParamD: switch((VstInt32)( D * 2.999 )) //0 to almost edge of # of params
+		{case 0: vst_strncpy (text, "Normal", kVstMaxParamStrLen); break;
+		 case 1: vst_strncpy (text, "Atten", kVstMaxParamStrLen); break;
+		 case 2: vst_strncpy (text, "Clips", kVstMaxParamStrLen); break;
+		 default: break; // unknown parameter, shouldn't happen!
+		} break;
         default: break; // unknown parameter, shouldn't happen!
 	} //this displays the values and handles 'popups' where it's discrete choices
 }
 
-void Acceleration::getParameterLabel(VstInt32 index, char *text) {
+void ADClip7::getParameterLabel(VstInt32 index, char *text) {
     switch (index) {
-        case kParamA: vst_strncpy (text, "", kVstMaxParamStrLen); break;
+        case kParamA: vst_strncpy (text, "dB", kVstMaxParamStrLen); break;
         case kParamB: vst_strncpy (text, "", kVstMaxParamStrLen); break;
+        case kParamC: vst_strncpy (text, "", kVstMaxParamStrLen); break;
+        case kParamD: vst_strncpy (text, "", kVstMaxParamStrLen); break;
 		default: break; // unknown parameter, shouldn't happen!
     }
 }
 
-VstInt32 Acceleration::canDo(char *text) 
+VstInt32 ADClip7::canDo(char *text) 
 { return (_canDo.find(text) == _canDo.end()) ? -1: 1; } // 1 = yes, -1 = no, 0 = don't know
 
-bool Acceleration::getEffectName(char* name) {
-    vst_strncpy(name, "Acceleration", kVstMaxProductStrLen); return true;
+bool ADClip7::getEffectName(char* name) {
+    vst_strncpy(name, "ADClip7", kVstMaxProductStrLen); return true;
 }
 
-VstPlugCategory Acceleration::getPlugCategory() {return kPlugCategEffect;}
+VstPlugCategory ADClip7::getPlugCategory() {return kPlugCategEffect;}
 
-bool Acceleration::getProductString(char* text) {
-  	vst_strncpy (text, "airwindows Acceleration", kVstMaxProductStrLen); return true;
+bool ADClip7::getProductString(char* text) {
+  	vst_strncpy (text, "airwindows ADClip7", kVstMaxProductStrLen); return true;
 }
 
-bool Acceleration::getVendorString(char* text) {
+bool ADClip7::getVendorString(char* text) {
   	vst_strncpy (text, "airwindows", kVstMaxVendorStrLen); return true;
 }

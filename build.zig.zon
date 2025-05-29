@@ -8,5 +8,6 @@
         "build.zig",
         "zig-src",
         "LICENSE",
+        "plugins/WinVST",
     },
 }

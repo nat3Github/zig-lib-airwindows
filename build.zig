@@ -19,6 +19,11 @@ pub fn build(b: *std.Build) void {
     const audioeffectx_h = b.path("zig-src/shim/");
     const audioeffectx_cpp = b.path("zig-src/shim/audioeffect.cpp");
     module.addIncludePath(audioeffectx_h.dirname());
+    module.addCSourceFile(.{
+        .file = audioeffectx_cpp,
+        .language = .cpp,
+        .flags = cpp_flags,
+    });
 
     const replace_tool = b.addExecutable(.{
         .name = "replace tool",
@@ -61,7 +66,6 @@ pub fn build(b: *std.Build) void {
             b.path(cpp_file),
             b.path(cpp_file2),
             cpp_file_auto_gen,
-            audioeffectx_cpp,
         }) |cxx_file| {
             cmod.addCSourceFile(.{
                 .file = cxx_file,
