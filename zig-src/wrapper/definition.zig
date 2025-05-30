@@ -11,7 +11,7 @@ fn get_complete_index() [@typeInfo(index_imports).@"struct".decls.len][]const u8
     return x;
 }
 
-const index_imports = struct {
+pub const index_imports = struct {
     pub const Acceleration = @import("Acceleration");
     pub const Acceleration2 = @import("Acceleration2");
     pub const ADClip7 = @import("ADClip7");

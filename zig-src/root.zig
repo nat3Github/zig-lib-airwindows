@@ -1,11 +1,4 @@
 const std = @import("std");
-pub fn slice_to_cPtr_array(T: type, size: comptime_int, slice: [][]T) [size]?*T {
-    var c_inputs_array: [size]?*T = undefined;
-    for (0..slice.len) |i| {
-        c_inputs_array[i] = @ptrCast(slice[i].ptr);
-    }
-    return c_inputs_array;
-}
 
 pub fn wrap(comptime effect_name: []const u8, comptime cmodule: type) type {
     return struct {
@@ -73,8 +66,27 @@ pub fn wrap(comptime effect_name: []const u8, comptime cmodule: type) type {
         }
     };
 }
+/// util fn to convert slices to arrays of slice ptr's for easy c interop
+pub fn slice_to_cPtr_array(T: type, size: comptime_int, slice: [][]T) [size]?*T {
+    var c_inputs_array: [size]?*T = undefined;
+    for (0..slice.len) |i| {
+        c_inputs_array[i] = @ptrCast(slice[i].ptr);
+    }
+    return c_inputs_array;
+}
+const def = @import("wrapper/definition.zig");
+const root = @This();
 
-pub const Acceleration = wrap("Acceleration", @import("Acceleration"));
+/// List of all ported Effects
+pub const complete_effect_list = def.complete_index;
+
+/// you must specify the Effect you want to import with the respective build option
+pub fn get_import(comptime Effect_Name: []const u8) type {
+    const mod = @field(def.index_imports, Effect_Name);
+    return wrap(Effect_Name, mod);
+}
+
+pub const Acceleration = root.get_import("Acceleration");
 
 test "Acceleration plugin wrapper test" {
     const allocator = std.testing.allocator;
