@@ -36,7 +36,7 @@ pub fn build(b: *std.Build) void {
 
     @setEvalBranchQuota(10000);
     inline for (def.complete_index) |fx_name| {
-        const aw_enable = b.option(bool, fx_name, "Enable " ++ fx_name ++ " Effect") orelse true;
+        const aw_enable = b.option(bool, fx_name, "Enable " ++ fx_name ++ " Effect") orelse false;
         if (aw_enable) {
             const dir_sub_path = def.plugin_base_path ++ fx_name;
             const cpp_file = dir_sub_path ++ "/" ++ fx_name ++ ".cpp";
@@ -98,6 +98,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .root_module = module,
     });
+
     const test_run = b.addRunArtifact(test_c);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&test_run.step);
