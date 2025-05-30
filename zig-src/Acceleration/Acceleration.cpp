@@ -8,7 +8,6 @@
 #endif
 
 AudioEffect* createEffectInstance(audioMasterCallback audioMaster) {return new Acceleration(audioMaster);}
-AudioEffect* createEffectInstance(audioMasterCallback audioMaster) {return new ADClip7(audioMaster);}
 
 Acceleration::Acceleration(audioMasterCallback audioMaster) :
     AudioEffectX(audioMaster, kNumPrograms, kNumParameters)

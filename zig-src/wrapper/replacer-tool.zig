@@ -1,64 +1,53 @@
 const std = @import("std");
-const def = @import("definition.zig"); // Assuming this defines `def.replace`
 
 pub fn main() !void {
-    // Get command-line arguments.
-    // The first argument is the executable's path.
     var args = std.process.args();
-    const executable_name = args.next().?; // Store the executable name for usage message
+    const executable_name = args.next().?;
 
     const input_file_path_arg = args.next();
-    const replacement_string_arg = args.next();
-    const output_file_path_arg = args.next(); // <--- NEW: Third argument for output file
+    const output_file_path_arg = args.next();
 
-    // Check if the correct number of arguments is provided.
-    // We now expect 3 arguments after the executable name.
-    if (input_file_path_arg == null or replacement_string_arg == null or output_file_path_arg == null or args.next() != null) {
-        std.log.err("Usage: {s} <input_file_path> <replacement_string> <output_file_path>\n", .{executable_name});
+    // Check for minimum arguments: executable + input + output
+    if (input_file_path_arg == null or output_file_path_arg == null) {
+        std.log.err("Usage: {s} <input_file_path> <output_file_path> [<search_string> <replacement_string> ...]\n", .{executable_name});
         return error.InputError;
     }
 
     const input_file_path = input_file_path_arg.?;
-    const replacement_string = replacement_string_arg.?;
-    const output_file_path = output_file_path_arg.?; // <--- Store the output file path
+    const output_file_path = output_file_path_arg.?;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer arena.deinit();
+    const alloc = arena.allocator();
 
     std.log.info("Opening input file: {s}", .{input_file_path});
-
-    // Open the input file for reading.
     const input_file = try std.fs.cwd().openFile(input_file_path, .{ .mode = .read_only });
     defer input_file.close();
 
-    // Read the entire content of the file into memory.
-    const file_content = try input_file.readToEndAlloc(allocator, std.math.maxInt(usize));
-    defer allocator.free(file_content);
+    var current_content = try input_file.readToEndAlloc(alloc, std.math.maxInt(usize));
 
-    std.log.info("Input file read successfully. Performing replacements...", .{});
+    while (args.next()) |search_string_arg| {
+        const replacement_string_arg = args.next();
+        if (replacement_string_arg == null) {
+            std.log.err("Error: Missing replacement string for search string '{s}'\n", .{search_string_arg});
+            return error.InputError;
+        }
 
-    // Define the string to be replaced (from definition.zig).
-    const search_string = def.replace; // Assuming def.replace is a `[]const u8` or `[]u8`
+        const search_string = search_string_arg;
+        const replacement_string = replacement_string_arg.?;
 
-    // Perform the replacement.
-    // `std.mem.replaceOwned` is good as it ensures the new memory is owned by `allocator`.
-    const modified_content = try std.mem.replaceOwned(u8, allocator, file_content, search_string, replacement_string);
-    defer allocator.free(modified_content);
+        std.log.info("Replacing '{s}' with '{s}'", .{ search_string, replacement_string });
 
-    std.log.info("Replacements complete. Writing to output file: {s}", .{output_file_path});
+        current_content = try std.mem.replaceOwned(u8, alloc, current_content, search_string, replacement_string);
+    }
 
-    // --- NEW: Open/Create the output file for writing ---
-    // `createFile` will create the file if it doesn't exist, or truncate it if it does.
     const output_file = try std.fs.cwd().createFile(output_file_path, .{ .read = true });
-    defer output_file.close(); // Ensure the output file is closed
+    defer output_file.close();
 
-    // Get a writer for the output file.
     const output_writer = output_file.writer();
 
-    std.log.warn("modified: {s}", .{modified_content});
-    // Write the modified content to the output file.
-    try output_writer.writeAll(modified_content);
-
-    std.log.info("Operation finished successfully.\n", .{});
+    try output_writer.writeAll(current_content);
+    std.log.info("All replacements complete. Writing to output file: {s}", .{output_file_path});
 }
